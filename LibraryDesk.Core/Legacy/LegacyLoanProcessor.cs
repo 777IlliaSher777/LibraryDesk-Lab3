@@ -1,12 +1,12 @@
 namespace LibraryDesk.Core.Legacy;
 
 /// <summary>
-/// Містить реалізацію обробки формуляра видачі книжок.
+/// Містить диспетчер обробки формуляра видачі книжок.
 /// </summary>
 public static class LegacyLoanProcessor
 {
     /// <summary>
-    /// Обчислює загальну суму видачі та визначає наступний стан документа.
+    /// Виконує послідовну обробку формуляра видачі.
     /// </summary>
     /// <param name="docId">Номер документа.</param>
     /// <param name="clientName">Ім'я клієнта.</param>
@@ -14,18 +14,18 @@ public static class LegacyLoanProcessor
     /// <param name="isRegular">Ознака постійного клієнта.</param>
     /// <param name="lines">Список книжкових позицій.</param>
     /// <param name="createdAt">Дата створення документа.</param>
-    /// <param name="couponCode">Промокод.</param>
+    /// <param name="couponCode">Код купона.</param>
     /// <param name="status">Поточний стан документа.</param>
-    /// <param name="printToConsole">Ознака виведення звіту в консоль.</param>
+    /// <param name="printToConsole">Ознака виведення звіту.</param>
     /// <param name="deliveryPrice">Вартість доставки.</param>
     /// <param name="newStatus">Новий стан документа.</param>
-    /// <returns>Загальна сума видачі.</returns>
+    /// <returns>Підсумкова сума видачі.</returns>
     public static decimal Process(
         int docId,
         string? clientName,
         string? clientEmail,
         bool isRegular,
-        List<BookRow>? lines,
+        IReadOnlyList<BookRow>? lines,
         DateOnly createdAt,
         string? couponCode,
         LoanStatus status,
@@ -40,84 +40,47 @@ public static class LegacyLoanProcessor
 
         LoanGuards.EnsureLinesValid(lines);
 
-        newStatus = status;
-        decimal total = 0m;
+        decimal total = DocumentTotalCalculator.SubtotalOf(lines!);
 
-        foreach (BookRow line in lines!)
-        {
-            decimal sum = line.Quantity * line.UnitPrice;
+        total -= DocumentTotalCalculator.ClientDiscountOf(
+            total,
+            isRegular);
 
-            if (line.Quantity >= 10)
-            {
-                sum *= 0.95m;
-            }
+        total -= DocumentTotalCalculator.VolumeDiscountOf(total);
 
-            total += sum;
-        }
+        total -= DocumentTotalCalculator.CouponDiscountOf(
+            total,
+            couponCode);
 
-        if (isRegular)
-        {
-            total *= 0.93m;
-        }
+        total -= DocumentTotalCalculator.WeekendDiscountOf(
+            total,
+            createdAt);
 
-        if (total > 5000m)
-        {
-            total *= 0.9m;
-        }
-        else if (total > 2000m)
-        {
-            total *= 0.95m;
-        }
+        total += DocumentTotalCalculator.DeliveryFeeOf(
+            total,
+            deliveryPrice);
 
-        if (couponCode == "SALE10")
-        {
-            total -= total * 0.1m;
-        }
-        else if (couponCode == "MINUS200" && total > 1000m)
-        {
-            total -= 200m;
-        }
+        total = status == LoanStatus.Cancelled
+            ? 0m
+            : Math.Round(Math.Max(total, 0m), 2);
 
-        if (createdAt.DayOfWeek == DayOfWeek.Sunday)
-        {
-            total *= 0.98m;
-        }
-
-        if (total < 1000m)
-        {
-            total += deliveryPrice;
-        }
-
-        if (total < 0m)
-        {
-            total = 0m;
-        }
-
-        total = Math.Round(total, 2);
-
-        if (status == LoanStatus.New && total > 0m)
-        {
-            newStatus = LoanStatus.Active;
-        }
-        else if (status == LoanStatus.Cancelled)
-        {
-            newStatus = LoanStatus.Cancelled;
-            total = 0m;
-        }
+        newStatus = DocumentTotalCalculator.NextStatusOf(
+            status,
+            total);
 
         if (printToConsole)
         {
-            Console.WriteLine($"Документ №: {docId}");
-            Console.WriteLine($"Клієнт: {clientName}");
-            Console.WriteLine($"Пошта: {clientEmail}");
+            Console.WriteLine("Документ № " + docId);
+            Console.WriteLine("Клієнт: " + clientName);
 
             foreach (BookRow line in lines!)
             {
-                Console.WriteLine($"{line.Sku} x {line.Quantity}");
+                Console.WriteLine(
+                    line.Sku + " x " + line.Quantity);
             }
 
-            Console.WriteLine($"Сума: {total:F2}");
-            Console.WriteLine($"Стан: {newStatus}");
+            Console.WriteLine("Разом: " + total);
+            Console.WriteLine("Стан: " + newStatus);
         }
 
         return total;

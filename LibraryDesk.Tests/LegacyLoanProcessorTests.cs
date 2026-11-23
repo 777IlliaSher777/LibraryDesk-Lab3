@@ -5,7 +5,7 @@ using Xunit;
 namespace LibraryDesk.Tests;
 
 /// <summary>
-/// Перевіряє поведінку обробки формуляра видачі.
+/// Перевіряє поведінку диспетчера обробки формуляра.
 /// </summary>
 public class LegacyLoanProcessorTests
 {
@@ -82,7 +82,7 @@ public class LegacyLoanProcessorTests
     }
 
     /// <summary>
-    /// Перевіряє, що порожній список позицій викликає виняток.
+    /// Перевіряє виняток для порожнього списку позицій.
     /// </summary>
     [Fact]
     public void ProcessWithoutLinesThrowsArgumentException()
@@ -105,7 +105,7 @@ public class LegacyLoanProcessorTests
     }
 
     /// <summary>
-    /// Перевіряє, що нульова кількість книжок викликає виняток.
+    /// Перевіряє виняток для нульової кількості книжок.
     /// </summary>
     [Fact]
     public void ProcessWithZeroQuantityThrowsArgumentOutOfRangeException()
