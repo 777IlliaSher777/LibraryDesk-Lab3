@@ -1,10 +1,11 @@
+using LibraryDesk.Core;
 using LibraryDesk.Core.Legacy;
 using Xunit;
 
 namespace LibraryDesk.Tests;
 
 /// <summary>
-/// Перевіряє початкову поведінку обробки формуляра видачі.
+/// Перевіряє поведінку обробки формуляра видачі.
 /// </summary>
 public class LegacyLoanProcessorTests
 {
@@ -38,13 +39,13 @@ public class LegacyLoanProcessorTests
             lines,
             new DateOnly(2026, 3, 10),
             string.Empty,
-            "New",
+            LoanStatus.New,
             false,
             60m,
-            out string? newStatus);
+            out LoanStatus newStatus);
 
         Assert.Equal(1292.70m, total);
-        Assert.Equal("Paid", newStatus);
+        Assert.Equal(LoanStatus.Active, newStatus);
     }
 
     /// <summary>
@@ -71,37 +72,66 @@ public class LegacyLoanProcessorTests
             lines,
             new DateOnly(2026, 3, 10),
             "SALE10",
-            "Paid",
+            LoanStatus.Active,
             false,
             60m,
-            out string? newStatus);
+            out LoanStatus newStatus);
 
         Assert.Equal(420m, total);
-        Assert.Equal("Shipped", newStatus);
+        Assert.Equal(LoanStatus.Active, newStatus);
     }
 
     /// <summary>
-    /// Перевіряє обробку документа без книжкових позицій.
+    /// Перевіряє, що порожній список позицій викликає виняток.
     /// </summary>
     [Fact]
-    public void ProcessWithoutLinesReturnsMinusOne()
+    public void ProcessWithoutLinesThrowsArgumentException()
     {
         List<BookRow> lines = new();
 
-        decimal total = LegacyLoanProcessor.Process(
-            3,
-            "Шевченко",
-            "shevchenko@example.com",
-            false,
-            lines,
-            new DateOnly(2026, 3, 10),
-            string.Empty,
-            "New",
-            false,
-            60m,
-            out string? newStatus);
+        Assert.Throws<ArgumentException>(() =>
+            LegacyLoanProcessor.Process(
+                3,
+                "Шевченко",
+                "shevchenko@example.com",
+                false,
+                lines,
+                new DateOnly(2026, 3, 10),
+                string.Empty,
+                LoanStatus.New,
+                false,
+                60m,
+                out _));
+    }
 
-        Assert.Equal(-1m, total);
-        Assert.Equal("New", newStatus);
+    /// <summary>
+    /// Перевіряє, що нульова кількість книжок викликає виняток.
+    /// </summary>
+    [Fact]
+    public void ProcessWithZeroQuantityThrowsArgumentOutOfRangeException()
+    {
+        List<BookRow> lines = new()
+        {
+            new BookRow
+            {
+                Sku = "BOOK-004",
+                Quantity = 0,
+                UnitPrice = 100m
+            }
+        };
+
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            LegacyLoanProcessor.Process(
+                4,
+                "Коваленко",
+                "kovalenko@example.com",
+                false,
+                lines,
+                new DateOnly(2026, 3, 10),
+                string.Empty,
+                LoanStatus.New,
+                false,
+                60m,
+                out _));
     }
 }

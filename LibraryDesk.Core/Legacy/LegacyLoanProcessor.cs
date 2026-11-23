@@ -1,7 +1,7 @@
 namespace LibraryDesk.Core.Legacy;
 
 /// <summary>
-/// Містить початкову реалізацію обробки формуляра видачі книжок.
+/// Містить реалізацію обробки формуляра видачі книжок.
 /// </summary>
 public static class LegacyLoanProcessor
 {
@@ -19,7 +19,7 @@ public static class LegacyLoanProcessor
     /// <param name="printToConsole">Ознака виведення звіту в консоль.</param>
     /// <param name="deliveryPrice">Вартість доставки.</param>
     /// <param name="newStatus">Новий стан документа.</param>
-    /// <returns>Загальна сума або -1 у разі помилки.</returns>
+    /// <returns>Загальна сума видачі.</returns>
     public static decimal Process(
         int docId,
         string? clientName,
@@ -28,62 +28,23 @@ public static class LegacyLoanProcessor
         List<BookRow>? lines,
         DateOnly createdAt,
         string? couponCode,
-        string? status,
+        LoanStatus status,
         bool printToConsole,
         decimal deliveryPrice,
-        out string? newStatus)
+        out LoanStatus newStatus)
     {
+        LoanGuards.EnsureHeaderValid(
+            docId,
+            clientName,
+            clientEmail);
+
+        LoanGuards.EnsureLinesValid(lines);
+
         newStatus = status;
         decimal total = 0m;
 
-        if (docId <= 0)
+        foreach (BookRow line in lines!)
         {
-            Console.WriteLine("Помилка: номер документа");
-            return -1m;
-        }
-
-        if (string.IsNullOrEmpty(clientName))
-        {
-            Console.WriteLine("Помилка: немає клієнта");
-            return -1m;
-        }
-
-        if (string.IsNullOrEmpty(clientEmail) ||
-            !clientEmail.Contains('@'))
-        {
-            Console.WriteLine("Помилка: пошта клієнта");
-            return -1m;
-        }
-
-        if (lines is null || lines.Count == 0)
-        {
-            Console.WriteLine("Помилка: немає позицій");
-            return -1m;
-        }
-
-        if (status != "New" &&
-            status != "Paid" &&
-            status != "Shipped" &&
-            status != "Cancelled")
-        {
-            Console.WriteLine("Помилка: невідомий стан");
-            return -1m;
-        }
-
-        foreach (BookRow line in lines)
-        {
-            if (line.Quantity <= 0)
-            {
-                Console.WriteLine("Помилка: кількість");
-                return -1m;
-            }
-
-            if (line.UnitPrice < 0m)
-            {
-                Console.WriteLine("Помилка: ціна");
-                return -1m;
-            }
-
             decimal sum = line.Quantity * line.UnitPrice;
 
             if (line.Quantity >= 10)
@@ -134,17 +95,13 @@ public static class LegacyLoanProcessor
 
         total = Math.Round(total, 2);
 
-        if (status == "New" && total > 0m)
+        if (status == LoanStatus.New && total > 0m)
         {
-            newStatus = "Paid";
+            newStatus = LoanStatus.Active;
         }
-        else if (status == "Paid")
+        else if (status == LoanStatus.Cancelled)
         {
-            newStatus = "Shipped";
-        }
-        else if (status == "Cancelled")
-        {
-            newStatus = "Cancelled";
+            newStatus = LoanStatus.Cancelled;
             total = 0m;
         }
 
@@ -154,7 +111,7 @@ public static class LegacyLoanProcessor
             Console.WriteLine($"Клієнт: {clientName}");
             Console.WriteLine($"Пошта: {clientEmail}");
 
-            foreach (BookRow line in lines)
+            foreach (BookRow line in lines!)
             {
                 Console.WriteLine($"{line.Sku} x {line.Quantity}");
             }
