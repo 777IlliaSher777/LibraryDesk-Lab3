@@ -5,133 +5,119 @@ using Xunit;
 namespace LibraryDesk.Tests;
 
 /// <summary>
-/// Перевіряє поведінку диспетчера обробки формуляра.
+/// Перевіряє розрахунок вартості формуляра видачі.
 /// </summary>
 public class LegacyLoanProcessorTests
 {
-    /// <summary>
-    /// Перевіряє розрахунок суми для постійного клієнта.
-    /// </summary>
     [Fact]
-    public void ProcessRegularClientReturnsExpectedTotal()
+    public void CalculateRegularClientReturnsExpectedTotal()
     {
-        List<BookRow> lines = new()
-        {
-            new BookRow
+        TotalRequest request = new(
+            DocumentId: 1,
+            Client: new ClientInfo(
+                "Іваненко",
+                "i@ex.com",
+                true),
+            Lines: new List<BookRow>
             {
-                Sku = "BOOK-001",
-                Quantity = 12,
-                UnitPrice = 100m
+                new()
+                {
+                    Sku = "A1",
+                    Quantity = 12,
+                    UnitPrice = 100m
+                },
+                new()
+                {
+                    Sku = "B2",
+                    Quantity = 1,
+                    UnitPrice = 250m
+                }
             },
-            new BookRow
-            {
-                Sku = "BOOK-002",
-                Quantity = 1,
-                UnitPrice = 250m
-            }
-        };
+            CreatedAt: new DateOnly(2026, 3, 10),
+            CouponCode: null,
+            Status: LoanStatus.New,
+            DeliveryPrice: 60m);
 
-        decimal total = LegacyLoanProcessor.Process(
-            1,
-            "Іваненко",
-            "ivanenko@example.com",
-            true,
-            lines,
-            new DateOnly(2026, 3, 10),
-            string.Empty,
-            LoanStatus.New,
-            false,
-            60m,
-            out LoanStatus newStatus);
+        TotalResult result =
+            DocumentTotalCalculator.Calculate(request);
 
-        Assert.Equal(1292.70m, total);
-        Assert.Equal(LoanStatus.Active, newStatus);
+        Assert.Equal(1292.70m, result.Total);
+        Assert.Equal(LoanStatus.Active, result.Status);
     }
 
-    /// <summary>
-    /// Перевіряє розрахунок суми для невеликої видачі.
-    /// </summary>
     [Fact]
-    public void ProcessSmallOrderReturnsExpectedTotal()
+    public void CalculateSmallOrderReturnsExpectedTotal()
     {
-        List<BookRow> lines = new()
-        {
-            new BookRow
+        TotalRequest request = new(
+            DocumentId: 2,
+            Client: new ClientInfo(
+                "Петренко",
+                "p@ex.com",
+                false),
+            Lines: new List<BookRow>
             {
-                Sku = "BOOK-003",
-                Quantity = 2,
-                UnitPrice = 200m
-            }
-        };
+                new()
+                {
+                    Sku = "BOOK-001",
+                    Quantity = 2,
+                    UnitPrice = 200m
+                }
+            },
+            CreatedAt: new DateOnly(2026, 3, 10),
+            CouponCode: PricingRules.SaleCoupon,
+            Status: LoanStatus.Active,
+            DeliveryPrice: 60m);
 
-        decimal total = LegacyLoanProcessor.Process(
-            2,
-            "Петренко",
-            "petrenko@example.com",
-            false,
-            lines,
-            new DateOnly(2026, 3, 10),
-            "SALE10",
-            LoanStatus.Active,
-            false,
-            60m,
-            out LoanStatus newStatus);
+        TotalResult result =
+            DocumentTotalCalculator.Calculate(request);
 
-        Assert.Equal(420m, total);
-        Assert.Equal(LoanStatus.Active, newStatus);
+        Assert.Equal(420m, result.Total);
+        Assert.Equal(LoanStatus.Active, result.Status);
     }
 
-    /// <summary>
-    /// Перевіряє виняток для порожнього списку позицій.
-    /// </summary>
     [Fact]
-    public void ProcessWithoutLinesThrowsArgumentException()
+    public void CalculateWithoutLinesThrowsArgumentException()
     {
-        List<BookRow> lines = new();
+        TotalRequest request = new(
+            DocumentId: 3,
+            Client: new ClientInfo(
+                "Іваненко",
+                "i@ex.com",
+                false),
+            Lines: new List<BookRow>(),
+            CreatedAt: new DateOnly(2026, 3, 10),
+            CouponCode: null,
+            Status: LoanStatus.New,
+            DeliveryPrice: 60m);
 
-        Assert.Throws<ArgumentException>(() =>
-            LegacyLoanProcessor.Process(
-                3,
-                "Шевченко",
-                "shevchenko@example.com",
-                false,
-                lines,
-                new DateOnly(2026, 3, 10),
-                string.Empty,
-                LoanStatus.New,
-                false,
-                60m,
-                out _));
+        Assert.Throws<ArgumentException>(
+            () => DocumentTotalCalculator.Calculate(request));
     }
 
-    /// <summary>
-    /// Перевіряє виняток для нульової кількості книжок.
-    /// </summary>
     [Fact]
-    public void ProcessWithZeroQuantityThrowsArgumentOutOfRangeException()
+    public void CalculateWithZeroQuantityThrowsArgumentOutOfRangeException()
     {
-        List<BookRow> lines = new()
-        {
-            new BookRow
+        TotalRequest request = new(
+            DocumentId: 4,
+            Client: new ClientInfo(
+                "Іваненко",
+                "i@ex.com",
+                false),
+            Lines: new List<BookRow>
             {
-                Sku = "BOOK-004",
-                Quantity = 0,
-                UnitPrice = 100m
-            }
-        };
+                new()
+                {
+                    Sku = "BOOK-002",
+                    Quantity = 0,
+                    UnitPrice = 100m
+                }
+            },
+            CreatedAt: new DateOnly(2026, 3, 10),
+            CouponCode: null,
+            Status: LoanStatus.New,
+            DeliveryPrice: 60m);
 
-        Assert.Throws<ArgumentOutOfRangeException>(() =>
-            LegacyLoanProcessor.Process(
-                4,
-                "Коваленко",
-                "kovalenko@example.com",
-                false,
-                lines,
-                new DateOnly(2026, 3, 10),
-                string.Empty,
-                LoanStatus.New,
-                false,
-                60m,
-                out _));
+        Assert.Throws<ArgumentOutOfRangeException>(
+            () => DocumentTotalCalculator.Calculate(request));
     }
 }

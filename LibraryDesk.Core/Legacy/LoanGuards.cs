@@ -17,9 +17,7 @@ public static class LoanGuards
         string? clientEmail)
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(docId);
-
         ArgumentException.ThrowIfNullOrWhiteSpace(clientName);
-
         ArgumentException.ThrowIfNullOrWhiteSpace(clientEmail);
 
         if (!clientEmail.Contains('@'))
@@ -37,14 +35,9 @@ public static class LoanGuards
     public static void EnsureLineValid(BookRow? line)
     {
         ArgumentNullException.ThrowIfNull(line);
-
         ArgumentException.ThrowIfNullOrWhiteSpace(line.Sku);
-
-        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(
-            line.Quantity);
-
-        ArgumentOutOfRangeException.ThrowIfNegative(
-            line.UnitPrice);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(line.Quantity);
+        ArgumentOutOfRangeException.ThrowIfNegative(line.UnitPrice);
     }
 
     /// <summary>
@@ -67,5 +60,25 @@ public static class LoanGuards
         {
             EnsureLineValid(line);
         }
+    }
+
+    /// <summary>
+    /// Перевіряє всі передумови запиту на розрахунок.
+    /// </summary>
+    /// <param name="request">Запит на розрахунок вартості видачі.</param>
+    public static void EnsureRequestValid(TotalRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        ArgumentNullException.ThrowIfNull(request.Client);
+
+        EnsureHeaderValid(
+            request.DocumentId,
+            request.Client.Name,
+            request.Client.Email);
+
+        EnsureLinesValid(request.Lines);
+
+        ArgumentOutOfRangeException.ThrowIfNegative(
+            request.DeliveryPrice);
     }
 }

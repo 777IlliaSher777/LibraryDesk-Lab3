@@ -1,63 +1,95 @@
 namespace LibraryDesk.Core.Legacy;
 
 /// <summary>
-/// Містить окремі підпрограми для розрахунку вартості видачі.
+/// Виконує розрахунок загальної вартості формуляра видачі.
 /// </summary>
 public static class DocumentTotalCalculator
 {
     /// <summary>
-    /// Обчислює суму книжкових позицій з урахуванням гуртової знижки.
+    /// Обчислює загальну суму та визначає наступний статус формуляра.
+    /// </summary>
+    /// <param name="request">Запит із даними для розрахунку.</param>
+    /// <returns>Результат розрахунку та новий статус.</returns>
+    public static TotalResult Calculate(TotalRequest request)
+    {
+        LoanGuards.EnsureRequestValid(request);
+
+        decimal total = SubtotalOf(request.Lines);
+
+        total -= ClientDiscountOf(
+            total,
+            request.Client.IsRegular);
+
+        total -= VolumeDiscountOf(total);
+
+        total -= CouponDiscountOf(
+            total,
+            request.CouponCode);
+
+        total -= WeekendDiscountOf(
+            total,
+            request.CreatedAt);
+
+        total += DeliveryFeeOf(
+            total,
+            request.DeliveryPrice);
+
+        total = request.Status == LoanStatus.Cancelled
+            ? 0m
+            : Math.Round(Math.Max(total, 0m), 2);
+
+        return new TotalResult(
+            total,
+            NextStatusOf(request.Status, total));
+    }
+
+    /// <summary>
+    /// Обчислює суму книжкових позицій із урахуванням оптової знижки.
     /// </summary>
     /// <param name="lines">Список книжкових позицій.</param>
-    /// <returns>Проміжна сума позицій.</returns>
+    /// <returns>Сума всіх позицій.</returns>
     public static decimal SubtotalOf(
         IReadOnlyList<BookRow> lines)
     {
-        LoanGuards.EnsureLinesValid(lines);
-
         decimal subtotal = 0m;
 
         foreach (BookRow line in lines)
         {
-            decimal sum = line.Quantity * line.UnitPrice;
+            decimal lineTotal = line.Quantity * line.UnitPrice;
 
             if (line.Quantity >= PricingRules.BulkQuantity)
             {
-                sum -= sum * PricingRules.BulkRate;
+                lineTotal *= 1m - PricingRules.BulkRate;
             }
 
-            subtotal += sum;
+            subtotal += lineTotal;
         }
 
         return subtotal;
     }
 
     /// <summary>
-    /// Обчислює знижку для постійного клієнта.
+    /// Обчислює знижку для постійного читача.
     /// </summary>
     /// <param name="amount">Поточна сума.</param>
-    /// <param name="isRegularClient">Ознака постійного клієнта.</param>
+    /// <param name="isRegularClient">Ознака постійного читача.</param>
     /// <returns>Розмір знижки.</returns>
     public static decimal ClientDiscountOf(
         decimal amount,
         bool isRegularClient)
     {
-        ArgumentOutOfRangeException.ThrowIfNegative(amount);
-
         return isRegularClient
             ? amount * PricingRules.RegularClientRate
             : 0m;
     }
 
     /// <summary>
-    /// Обчислює знижку залежно від суми замовлення.
+    /// Обчислює знижку залежно від суми формуляра.
     /// </summary>
     /// <param name="amount">Поточна сума.</param>
     /// <returns>Розмір знижки.</returns>
     public static decimal VolumeDiscountOf(decimal amount)
     {
-        ArgumentOutOfRangeException.ThrowIfNegative(amount);
-
         if (amount > PricingRules.LargeOrderFrom)
         {
             return amount * PricingRules.LargeOrderRate;
@@ -72,7 +104,7 @@ public static class DocumentTotalCalculator
     }
 
     /// <summary>
-    /// Обчислює знижку за промокодом.
+    /// Обчислює знижку за купоном.
     /// </summary>
     /// <param name="amount">Поточна сума.</param>
     /// <param name="couponCode">Код купона.</param>
@@ -81,8 +113,6 @@ public static class DocumentTotalCalculator
         decimal amount,
         string? couponCode)
     {
-        ArgumentOutOfRangeException.ThrowIfNegative(amount);
-
         return couponCode switch
         {
             PricingRules.SaleCoupon =>
@@ -97,17 +127,15 @@ public static class DocumentTotalCalculator
     }
 
     /// <summary>
-    /// Обчислює знижку за створення документа у неділю.
+    /// Обчислює знижку за створення формуляра у вихідний день.
     /// </summary>
     /// <param name="amount">Поточна сума.</param>
-    /// <param name="createdAt">Дата створення документа.</param>
+    /// <param name="createdAt">Дата створення формуляра.</param>
     /// <returns>Розмір знижки.</returns>
     public static decimal WeekendDiscountOf(
         decimal amount,
         DateOnly createdAt)
     {
-        ArgumentOutOfRangeException.ThrowIfNegative(amount);
-
         return createdAt.DayOfWeek == DayOfWeek.Sunday
             ? amount * PricingRules.WeekendRate
             : 0m;
@@ -123,32 +151,26 @@ public static class DocumentTotalCalculator
         decimal amount,
         decimal deliveryPrice)
     {
-        ArgumentOutOfRangeException.ThrowIfNegative(amount);
-        ArgumentOutOfRangeException.ThrowIfNegative(deliveryPrice);
-
         return amount < PricingRules.FreeDeliveryFrom
             ? deliveryPrice
             : 0m;
     }
 
     /// <summary>
-    /// Визначає наступний стан формуляра.
+    /// Визначає наступний статус формуляра.
     /// </summary>
-    /// <param name="current">Поточний стан.</param>
+    /// <param name="current">Поточний статус.</param>
     /// <param name="total">Підсумкова сума.</param>
-    /// <returns>Наступний стан формуляра.</returns>
+    /// <returns>Наступний статус.</returns>
     public static LoanStatus NextStatusOf(
         LoanStatus current,
         decimal total)
     {
-        ArgumentOutOfRangeException.ThrowIfNegative(total);
-
-        return current switch
+        if (current == LoanStatus.New && total > 0m)
         {
-            LoanStatus.New when total > 0m =>
-                LoanStatus.Active,
+            return LoanStatus.Active;
+        }
 
-            _ => current
-        };
+        return current;
     }
 }
