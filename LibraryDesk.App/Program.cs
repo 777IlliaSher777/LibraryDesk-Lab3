@@ -1,6 +1,7 @@
 using System.Text;
 using LibraryDesk.Core;
 using LibraryDesk.Core.Legacy;
+using LibraryDesk.Core.Reporting;
 
 Console.OutputEncoding = Encoding.UTF8;
 
@@ -33,4 +34,7 @@ TotalRequest request = new(
 TotalResult result =
     DocumentTotalCalculator.Calculate(request);
 
-Console.WriteLine(result.Total);
+string report =
+    DocumentReport.TextOf(request, result);
+
+new DocumentReportPrinter(Console.Out).Print(report);
